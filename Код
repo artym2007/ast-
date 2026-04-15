@@ -1,0 +1,228 @@
+
+
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import os
+from datetime import datetime
+
+class NoteApp:
+   def __init__(self, root):
+       self.root = root
+       self.root.title("Python Notes Manager — CRUD + Markdown")
+       self.root.geometry("800x600")
+       self.root.configure(bg='#f0f0f0')
+
+       # Основной фрейм с отступами
+       main_frame = tk.Frame(self.root, bg='#f0f0f0', padx=10, pady=10)
+       main_frame.pack(fill='both', expand=True)
+
+       # Заголовок приложения
+       title_label = tk.Label(main_frame, text="Менеджер заметок",
+                              font=('Arial', 16, 'bold'), bg='#f0f0f0', fg='#333333')
+       title_label.pack(pady=(0, 10))
+
+       # Панель поиска с кнопкой
+       search_frame = tk.Frame(main_frame, bg='#f0f0f0')
+       search_frame.pack(fill='x', pady=(0, 10))
+
+       tk.Label(search_frame, text="Поиск:", font=('Arial', 10),
+                bg='#f0f0f0').pack(side='left', padx=(0, 5))
+       self.search_var = tk.StringVar()
+       self.search_var.trace_add("write", self.update_list)
+       self.search_entry = tk.Entry(search_frame, textvariable=self.search_var,
+                                    font=('Arial', 10), width=30)
+       self.search_entry.pack(side='left', fill='x', expand=True, padx=(0, 5))
+
+       # Кнопка поиска
+       self.search_btn = tk.Button(search_frame, text="🔍 Найти",
+                                   command=self.update_list, bg='#4CAF50', fg='white',
+                                   font=('Arial', 9), relief='flat', padx=8, pady=2)
+       self.search_btn.pack(side='left')
+
+       # Основная область (Список заметок и Текст)
+       main_paned = tk.PanedWindow(main_frame, orient=tk.HORIZONTAL, sashwidth=5)
+       main_paned.pack(fill='both', expand=True)
+
+       # Список заметок с прокруткой
+       list_frame = tk.Frame(main_paned)
+       self.note_list = tk.Listbox(list_frame, font=('Consolas', 9),
+                                   bg='white', selectbackground='#4CAF50',
+                                   selectforeground='white')
+       scrollbar = tk.Scrollbar(list_frame, orient='vertical', command=self.note_list.yview)
+       self.note_list.configure(yscrollcommand=scrollbar.set)
+
+       self.note_list.pack(side='left', fill='both', expand=True)
+       scrollbar.pack(side='right', fill='y')
+       main_paned.add(list_frame, width=250)
+
+       # Область текста с прокруткой
+       text_frame = tk.Frame(main_paned)
+       self.text_area = tk.Text(text_frame, wrap='word', font=('Arial', 11),
+                                bg='white', relief='solid', bd=1)
+       text_scrollbar = tk.Scrollbar(text_frame, orient='vertical', command=self.text_area.yview)
+       self.text_area.configure(yscrollcommand=text_scrollbar.set)
+
+       self.text_area.pack(side='left', fill='both', expand=True)
+       text_scrollbar.pack(side='right', fill='y')
+       main_paned.add(text_frame)
+
+       # Кнопки управления
+       btn_frame = tk.Frame(main_frame, bg='#f0f0f0')
+       btn_frame.pack(fill='x', pady=10)
+
+       # Верхний ряд кнопок
+       top_btn_frame = tk.Frame(btn_frame, bg='#f0f0f0')
+       top_btn_frame.pack(fill='x')
+
+       tk.Button(top_btn_frame, text="➕ Новая (C)", command=self.new_note,
+                 bg='#4CAF50', fg='white', font=('Arial', 9, 'bold'),
+                 relief='flat', padx=12, pady=5).pack(side='left', padx=5)
+
+       tk.Button(top_btn_frame, text="💾 Сохранить (U)", command=self.save_note,
+                 bg='#2196F3', fg='white', font=('Arial', 9, 'bold'),
+                 relief='flat', padx=12, pady=5).pack(side='left', padx=5)
+
+       tk.Button(top_btn_frame, text="❌ Удалить (D)", command=self.delete_note,
+                 bg='#F44336', fg='white', font=('Arial', 9, 'bold'),
+                 relief='flat', padx=12, pady=5).pack(side='left', padx=5)
+
+       # Нижний ряд кнопок
+       bottom_btn_frame = tk.Frame(btn_frame, bg='#f0f0f0')
+       bottom_btn_frame.pack(fill='x', pady=(5, 0))
+
+       tk.Button(bottom_btn_frame, text="📥 Импорт .md", command=self.import_md,
+                 bg='#9C27B0', fg='white', font=('Arial', 9),
+                 relief='flat', padx=10, pady=4).pack(side='left', padx=5)
+
+       tk.Button(bottom_btn_frame, text="📤 Экспорт .md", command=self.export_md,
+                 bg='#FF9800', fg='white', font=('Arial', 9),
+                 relief='flat', padx=10, pady=4).pack(side='left', padx=5)
+
+       # Хранилище (имитация базы данных в папке 'notes')
+       self.notes_dir = "notes"
+       if not os.path.exists(self.notes_dir):
+           os.makedirs(self.notes_dir)
+       self.update_list()
+
+       # Связываем выбор заметки с загрузкой
+       self.note_list.bind('<<ListboxSelect>>', self.load_note)
+
+       # Переменные для стартового текста
+       self.start_text = "Введите текст заметки..."
+       self.start_text_displayed = False
+
+   def update_list(self, *args):
+       search_term = self.search_var.get().lower()
+       self.note_list.delete(0, tk.END)
+       for file in os.listdir(self.notes_dir):
+           if file.endswith(".md"):
+               if search_term in file.lower():
+                   self.note_list.insert(tk.END, file)
+
+   def new_note(self):
+       self.text_area.delete("1.0", tk.END)
+       current_time = datetime.now().strftime('%Y-%m-%d %H:%M')
+       self.text_area.insert("1.0", f"# Новая заметка\n\nСоздано: {current_time}\n\n{self.start_text}")
+       self.start_text_displayed = True
+       self.text_area.bind('<Key>', self.on_start_typing)
+       self.note_list.selection_clear(0, tk.END)
+
+   def on_start_typing(self, event):
+       current_content = self.text_area.get("1.0", tk.END).rstrip()
+       if self.start_text_displayed and current_content == self.start_text:
+           self.text_area.delete("1.0", tk.END)
+           self.start_text_displayed = False
+           self.text_area.unbind('<Key>')
+
+   def save_note(self):
+       content = self.text_area.get("1.0", tk.END).rstrip()
+       if self.start_text_displayed and content == self.start_text:
+           messagebox.showwarning("Предупреждение", "Текст заметки пуст!")
+           return
+       if not content:
+           messagebox.showwarning("Предупреждение", "Текст заметки пуст!")
+           return
+       title = content.split('\n')[0].strip().replace('#', '').strip()
+       safe_title = ''.join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+       if not safe_title:
+           safe_title = f"note_{datetime.now().strftime('%H%M%S')}"
+       file_path = os.path.join(self.notes_dir, f"{safe_title}.md")
+       try:
+           with open(file_path, "w", encoding="utf-8") as f:
+               f.write(content)
+           self.update_list()
+           messagebox.showinfo("Успех", f"Заметка сохранена как {safe_title}.md")
+       except Exception as e:
+           messagebox.showerror("Ошибка", f"Не удалось сохранить файл: {e}")
+
+   def load_note(self, event):
+       if not self.note_list.curselection():
+           return
+       filename = self.note_list.get(self.note_list.curselection())
+       try:
+           with open(os.path.join(self.notes_dir, filename), "r", encoding="utf-8") as f:
+               self.text_area.delete("1.0", tk.END)
+               self.text_area.insert("1.0", f.read())
+           self.start_text_displayed = False
+           self.text_area.unbind('<Key>')
+       except Exception as e:
+           messagebox.showerror("Ошибка", f"Не удалось загрузить файл: {e}")
+
+   def delete_note(self):
+       if not self.note_list.curselection():
+           messagebox.showwarning("Предупреждение", "Выберите заметку для удаления")
+           return
+       filename = self.note_list.get(self.note_list.curselection())
+       try:
+           os.remove(os.path.join(self.notes_dir, filename))
+           self.text_area.delete("1.0", tk.END)
+           self.update_list()
+           messagebox.showinfo("Успех", "Заметка удалена")
+       except Exception as e:
+           messagebox.showerror("Ошибка", f"Не удалось удалить файл: {e}")
+
+   def import_md(self):
+       path = filedialog.askopenfilename(
+           title="Выберите Markdown-файл для импорта",
+           filetypes=[("Markdown files", "*.md"), ("All files", "*.*")]
+       )
+       if path:
+           try:
+               with open(path, "r", encoding="utf-8") as f:
+                   content = f.read()
+               self.text_area.delete("1.0", tk.END)
+               self.text_area.insert("1.0", content)
+               self.start_text_displayed = False
+               self.text_area.unbind('<Key>')
+           except Exception as e:
+               messagebox.showerror("Ошибка", f"Ошибка импорта: {e}")
+
+   def export_md(self):
+       content = self.text_area.get("1.0", tk.END).strip()
+       if not content:
+           messagebox.showwarning("Предупреждение", "Нет данных для экспорта")
+           return
+
+       title = content.split('\n')[0].strip()
+       safe_title = ''.join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+       if not safe_title:
+           safe_title = "exported_note"
+
+       path = filedialog.asksaveasfilename(
+           defaultextension=".md",
+           filetypes=[("Markdown", "*.md")],
+           initialfile=f"{safe_title}.md"
+       )
+       if path:
+           try:
+               with open(path, "w", encoding="utf-8") as f:
+                   f.write(content)
+               messagebox.showinfo("Успех", "Файл экспортирован")
+           except Exception as e:
+               messagebox.showerror("Ошибка", f"Ошибка экспорта: {e}")
+
+# Запуск приложения
+if __name__ == "__main__":
+   root = tk.Tk()
+   app = NoteApp(root)
+   root.mainloop()
